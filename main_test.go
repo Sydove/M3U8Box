@@ -8,25 +8,39 @@ import (
 )
 
 func TestAllProcess(t *testing.T) {
-	baseUrl := "https://cgw666.com"
 	data := []string{
-		"/archives/43462/",
-		"/archives/43250/",
+		"https://bowl.bdxslpmh.cc/archives/207388.html",
+		"https://bowl.bdxslpmh.cc/archives/206193.html",
+		"https://bowl.bdxslpmh.cc/archives/205383.html",
+		"https://bowl.bdxslpmh.cc/archives/204846.html",
+		"https://bowl.bdxslpmh.cc/archives/204653.html",
+		"https://bowl.bdxslpmh.cc/archives/204379.html",
+		"https://bowl.bdxslpmh.cc/archives/203715.html",
+		"https://bowl.bdxslpmh.cc/archives/203362.html",
+		"https://bowl.bdxslpmh.cc/archives/203243.html",
+		"https://bowl.bdxslpmh.cc/archives/203301.html",
+		"https://bowl.bdxslpmh.cc/archives/202555.html",
+		"https://bowl.bdxslpmh.cc/archives/202347.html",
+		"https://bowl.bdxslpmh.cc/archives/202008.html",
+		"https://bowl.bdxslpmh.cc/archives/201964.html",
+		"https://bowl.bdxslpmh.cc/archives/199240.html",
+		"https://bowl.bdxslpmh.cc/archives/194018.html",
+		"https://bowl.bdxslpmh.cc/archives/193990.html",
+		"https://bowl.bdxslpmh.cc/archives/179907.html",
+		"https://bowl.bdxslpmh.cc/archives/147750.html",
 	}
 
-	for _, suffix := range data {
-		if suffix == "" {
-			continue
-		}
-		url := baseUrl + suffix
-		title, hrefs := extraM3u8(url)
+	for _, url := range data {
+		var title string
+		hrefs := make([]string, 0)
+		title, hrefs = getIndexDocument(url)
 		if title == "" || len(hrefs) == 0 {
-			t.Errorf("extraM3u8 函数执行失败")
+			fmt.Println("请求未解析到m3u8视频链接", url)
 		}
 		for index, href := range hrefs {
 			filename := fmt.Sprintf("%s_%d.mp4", title, index)
-			videoSavePath := filepath.Join("/Users/sydove/changtui", filename)
-			syntheticM3U8(href, videoSavePath, "/Users/sydove/changtui/static", title, 15)
+			videoSavePath := filepath.Join("/Users/sydove/private/naizijizy", filename)
+			syntheticM3U8(href, videoSavePath, "/Users/sydove/private/naizijizy/static", title, 15)
 		}
 		time.Sleep(10 * time.Second)
 	}

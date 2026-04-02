@@ -93,6 +93,11 @@ func main() {
 	fmt.Println("下载完成!")
 }
 
+// extraM3u8
+//  @Description: 提取用户提供网页中所有视频文件的密钥文件url和所有ts文件url
+//  @param url 视频文件url
+//  @return string
+//  @return []string
 func extraM3u8(url string) (string, []string) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -151,6 +156,14 @@ func extraM3u8(url string) (string, []string) {
 	return title[1], results
 }
 
+// syntheticM3U8
+//  @Description: 合成m3u8文件,整合所有ts文件和密钥文件
+//  @param url 视频文件url
+//  @param videoSavePath
+//  @param savePath
+//  @param title
+//  @param concurrency
+//  @return string
 func syntheticM3U8(url string, videoSavePath string, savePath string, title string, concurrency int) string {
 	timeStr := time.Now().Format("150405")
 	hash := sha256.Sum256([]byte(fmt.Sprintf("%s-%s", title, timeStr)))
@@ -210,6 +223,13 @@ func syntheticM3U8(url string, videoSavePath string, savePath string, title stri
 	return savePath
 }
 
+// modifyM3U8
+//  @Description: 修改m3u8文件,替换为本地路径的所有本地的.ts文件和密钥文件
+//  @param m3u8Path m3u8文件路径
+//  @param cryptPath 密钥文件路径
+//  @param tsPaths ts文件路径列表
+//  @return string
+//  @return error
 func modifyM3U8(m3u8Path, cryptPath string, tsPaths []string) (string, error) {
 	// 读取原始 m3u8 文件
 	content, err := os.ReadFile(m3u8Path)
@@ -243,6 +263,15 @@ func modifyM3U8(m3u8Path, cryptPath string, tsPaths []string) (string, error) {
 	return m3u8Content, nil
 }
 
+// extractDownFile
+//  @Description: 提取视频文件的密钥文件url和所有ts文件url
+//  @param url 视频文件url
+//  @param fullPath 保存路径
+//  @param hastStr 视频标题哈希
+//  @return string
+//  @return []string
+//  @return string
+//  @return error
 func extractDownFile(url string, fullPath string, hastStr string) (string, []string, string, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -296,6 +325,15 @@ func extractDownFile(url string, fullPath string, hastStr string) (string, []str
 	return cryptUrl, tsUrlList, m3u8FilePath, nil
 }
 
+// getAllFile
+//  @Description: 下载m3u8文件和所有ts文件和密钥文件
+//  @param cryptUrl 密钥文件url
+//  @param tsList ts文件url列表
+//  @param fullPath 保存路径
+//  @param hashStr 视频标题哈希
+//  @param concurrency 并发下载数
+//  @return string
+//  @return []string
 func getAllFile(cryptUrl string, tsList []string, fullPath string, hashStr string, concurrency int) (string, []string) {
 	// 下载crypt文件
 	cryptSavePath := filepath.Join(fullPath, fmt.Sprintf("crypt.key"))
@@ -340,6 +378,11 @@ func getAllFile(cryptUrl string, tsList []string, fullPath string, hashStr strin
 	return cryptSavePath, tsPath
 }
 
+// downFile
+//  @Description: 下载文件
+//  @param url 文件url
+//  @param savePath 保存路径
+//  @return error
 func downFile(url string, savePath string) error {
 
 	// 创建请求并添加 headers
