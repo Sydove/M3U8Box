@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -24,11 +26,11 @@ var httpClient = &http.Client{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
-		// 配置代理服务器
-		Proxy: func(_ *http.Request) (*url.URL, error) {
-			// 替换为你的代理服务器地址和端口
-			return url.Parse("http://127.0.0.1:1082")
-		},
+		//// 配置代理服务器
+		//Proxy: func(_ *http.Request) (*url.URL, error) {
+		//	// 替换为你的代理服务器地址和端口
+		//	return url.Parse("http://127.0.0.1:1082")
+		//},
 	},
 	Timeout: 1 * time.Minute,
 }
@@ -63,10 +65,16 @@ func main() {
 
 	// 解析url请求中的m3u8列表
 	fmt.Printf("正解析: %s\n", url)
-	title, m3u8List := extraM3u8(url)
+	var title string
+	var m3u8List []string
+	title, m3u8List = extraM3u8(url)
 	if m3u8List == nil {
-		fmt.Println("未解析到m3u8视频链接")
-		os.Exit(1)
+		fmt.Println("请求未解析到m3u8视频链接")
+		title, m3u8List = getIndexDocument(url)
+		if m3u8List == nil {
+			fmt.Println("无头浏览器未解析到m3u8视频链接")
+			os.Exit(1)
+		}
 	}
 
 	fmt.Printf("正在下载: %s\n", url)
@@ -368,4 +376,75 @@ func downFile(url string, savePath string) error {
 		return err
 	}
 	return nil
+}
+
+// getIndexDocument
+//
+//	@Description: 使用无头浏览器获取视频页面的标题和m3u8文件列表
+//	@param url
+//	@return string
+//	@return []string
+func getIndexDocument(url string) (string, []string) {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("disable-gpu", true),
+	)
+
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer cancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// 开启 network
+	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+		panic(err)
+	}
+
+	// channel 收集 m3u8
+	m3u8Chan := make(chan string, 20)
+	m3u8Map := make(map[string]struct{})
+
+	// 监听网络事件
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		if res, ok := ev.(*network.EventResponseReceived); ok {
+			itemUrl := res.Response.URL
+			if strings.Contains(itemUrl, ".m3u8") {
+				m3u8Chan <- itemUrl
+			}
+		}
+	})
+
+	// 消费 channel
+	done := make(chan struct{})
+	go func() {
+		for itemUrl := range m3u8Chan {
+			if _, exists := m3u8Map[itemUrl]; !exists {
+				m3u8Map[itemUrl] = struct{}{}
+			}
+		}
+		close(done)
+	}()
+
+	var title string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(url),
+		chromedp.Title(&title),
+		chromedp.Sleep(10*time.Second),
+	); err != nil {
+		panic(err)
+	}
+
+	close(m3u8Chan)
+	<-done
+
+	var m3u8List []string
+	for k := range m3u8Map {
+		m3u8List = append(m3u8List, k)
+	}
+
+	return title, m3u8List
 }
