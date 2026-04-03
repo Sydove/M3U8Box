@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/schollz/progressbar/v3"
 	"github.com/sydove/M3U8Box/internal/logger"
+	"github.com/sydove/M3U8Box/internal/utils"
 	"github.com/sydove/M3U8Box/pkg/httpclient"
 )
 
@@ -31,7 +32,7 @@ func (d *DefaultDownloader) CommonDownload(url string, savePath string) error {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
 	req.Header.Set("Connection", "keep-alive")
 
-	resp, err := httpclient.Client.Do(req)
+	resp, err := httpclient.DoWithRetry(req)
 	if err != nil {
 		logger.Errorf("HTTP 请求失败: %v", err)
 		logger.Errorf("请求的 URL: %s", url)
@@ -39,17 +40,35 @@ func (d *DefaultDownloader) CommonDownload(url string, savePath string) error {
 	}
 	defer resp.Body.Close()
 
-	file, err := os.Create(savePath)
+	tempPath := savePath + ".part"
+	file, err := os.Create(tempPath)
 	if err != nil {
 		logger.Errorf("创建文件失败: %v", err)
 		return err
 	}
-	defer file.Close()
+	closed := false
+	defer func() {
+		if !closed {
+			_ = file.Close()
+		}
+		if err != nil {
+			_ = os.Remove(tempPath)
+		}
+	}()
 
 	buffer := make([]byte, 1024*1024)
 	_, err = io.CopyBuffer(file, resp.Body, buffer)
 	if err != nil {
 		logger.Errorf("读取响应体失败: %v", err)
+		return err
+	}
+	if err = file.Close(); err != nil {
+		logger.Errorf("关闭文件失败: %v", err)
+		return err
+	}
+	closed = true
+	if err = os.Rename(tempPath, savePath); err != nil {
+		logger.Errorf("重命名临时文件失败: %v", err)
 		return err
 	}
 	return nil
@@ -71,16 +90,10 @@ func (d *HLDownloader) DownFile(cryptUrl string, tsList []string, staticPath str
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, concurrency)
 	tsPath := make([]string, 0, len(tsList))
+	errChan := make(chan error, len(tsList))
 
 	// 进度条
-	bar := progressbar.NewOptions(len(tsList),
-		progressbar.OptionSetDescription("下载进度"),
-		progressbar.OptionShowCount(),
-		progressbar.OptionShowIts(),
-		progressbar.OptionSetWidth(40),
-		progressbar.OptionThrottle(10), // 限制刷新频率（避免卡顿）
-		progressbar.OptionClearOnFinish(),
-	)
+	bar := utils.NewProgressBar(len(tsList))
 	bar.RenderBlank()
 	os.Stdout.Sync()
 	for index, tsUrl := range tsList {
@@ -95,11 +108,22 @@ func (d *HLDownloader) DownFile(cryptUrl string, tsList []string, staticPath str
 			semaphore <- struct{}{}
 			if err := d.CommonDownload(url, path); err != nil {
 				logger.Errorf("下载 ts 文件失败: %v", err)
+				errChan <- fmt.Errorf("下载 ts 文件失败: %s: %w", url, err)
 			}
 			bar.Add(1)
 			<-semaphore
 		}(trimmedUrl, tsSavePath)
 	}
 	wg.Wait()
+	close(errChan)
+
+	var downloadErr error
+	for err := range errChan {
+		downloadErr = errors.Join(downloadErr, err)
+	}
+	if downloadErr != nil {
+		return "", nil, downloadErr
+	}
+
 	return cryptSavePath, tsPath, nil
 }

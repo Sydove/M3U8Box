@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 
@@ -14,8 +16,13 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	if err := logger.Init(); err != nil {
-		log.Fatalf("初始化日志失败: %v", err)
+		_, _ = fmt.Fprintf(os.Stderr, "初始化日志失败: %v\n", err)
+		return 1
 	}
 	defer func() {
 		if err := logger.Close(); err != nil {
@@ -27,9 +34,13 @@ func main() {
 
 	options, err := parseRunOptions()
 	if err != nil {
+		if errors.Is(err, errShowUsage) {
+			printUsage()
+			return 1
+		}
 		logger.Errorf("%v", err)
-		logger.Infof(usageText())
-		os.Exit(1)
+		printUsage()
+		return 1
 	}
 
 	// 运行
@@ -45,5 +56,10 @@ func main() {
 		Concurrency:    options.concurrency,
 		Name:           options.name,
 	}
-	downloadApp.Run(options.links)
+	if err := downloadApp.Run(options.links); err != nil {
+		logger.Errorf("任务执行结束，但存在错误: %v", err)
+		return 1
+	}
+
+	return 0
 }

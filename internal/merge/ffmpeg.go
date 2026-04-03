@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,11 +52,15 @@ func (f *FmgMerger) Modify(m3u8File string, cryptPath string, staticPath string,
 	m3u8Content := string(content)
 
 	// 替换 crypt.key 路径
-	//if cryptPath != "" {
-	//	// 使用正则表达式替换 URI 中的密钥路径
-	//	cryptRule := regexp.MustCompile(`URI="[^"]+"`)
-	//	m3u8Content = cryptRule.ReplaceAllString(m3u8Content, fmt.Sprintf(`URI="%s"`, cryptPath))
-	//}
+	if cryptPath != "" {
+		relativeCryptPath, err := filepath.Rel(staticPath, cryptPath)
+		if err != nil {
+			return "", fmt.Errorf("生成相对密钥路径失败: %w", err)
+		}
+		// 使用正则表达式替换 URI 中的密钥路径
+		cryptRule := regexp.MustCompile(`URI="[^"]+"`)
+		m3u8Content = cryptRule.ReplaceAllString(m3u8Content, fmt.Sprintf(`URI="%s"`, filepath.ToSlash(relativeCryptPath)))
+	}
 
 	// 替换 TS 文件路径
 	if len(tsPaths) > 0 {
@@ -66,7 +71,11 @@ func (f *FmgMerger) Modify(m3u8File string, cryptPath string, staticPath string,
 		// 替换每个 TS 文件路径
 		for i, tsUrl := range tsMatches {
 			if i < len(tsPaths) {
-				m3u8Content = strings.Replace(m3u8Content, tsUrl, tsPaths[i], 1)
+				relativeTSPath, err := filepath.Rel(staticPath, tsPaths[i])
+				if err != nil {
+					return "", fmt.Errorf("生成相对 ts 路径失败: %w", err)
+				}
+				m3u8Content = strings.Replace(m3u8Content, tsUrl, filepath.ToSlash(relativeTSPath), 1)
 			}
 		}
 	}

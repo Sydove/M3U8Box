@@ -35,7 +35,7 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 	req.Header.Set("Connection", "keep-alive")
 
 	// 发送请求
-	resp, err := httpclient.Client.Do(req)
+	resp, err := httpclient.DoWithRetry(req)
 	if err != nil {
 		logger.Errorf("HTTP 请求失败: %v", err)
 		logger.Errorf("请求的 URL: %s", url)
@@ -58,8 +58,11 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 	// 提取文件名称,提取所有m3u8的链接
 	titleRule := regexp.MustCompile(`property="og:title" content="(.*?)"/>`)
 	title := titleRule.FindStringSubmatch(strBody)
+	titleText := url
 	if title == nil || len(title) <= 1 {
 		logger.Warnf("%s 标题提取失败", url)
+	} else {
+		titleText = title[1]
 	}
 
 	hrefRule := regexp.MustCompile(`:"(https:.*?.m3u8\?auth_key=.*?)",`)
@@ -76,7 +79,11 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 		results = append(results, targetHref)
 	}
 
-	return title[1], results, nil
+	if len(results) == 0 {
+		return titleText, nil, fmt.Errorf("未提取到 m3u8 链接: %s", url)
+	}
+
+	return titleText, results, nil
 }
 
 type BrowserhExtractor struct{}
@@ -97,7 +104,7 @@ func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 	defer cancel()
 
 	if err := chromedp.Run(ctx, network.Enable()); err != nil {
-		panic(err)
+		return "", nil, err
 	}
 
 	m3u8Chan := make(chan string, 20)
@@ -128,7 +135,7 @@ func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 		chromedp.Title(&title),
 		chromedp.Sleep(10*time.Second),
 	); err != nil {
-		panic(err)
+		return "", nil, err
 	}
 
 	close(m3u8Chan)
@@ -137,6 +144,10 @@ func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 	var m3u8List []string
 	for k := range m3u8Map {
 		m3u8List = append(m3u8List, k)
+	}
+
+	if len(m3u8List) == 0 {
+		return title, nil, fmt.Errorf("浏览器模式未捕获到 m3u8 请求: %s", url)
 	}
 
 	return title, m3u8List, nil

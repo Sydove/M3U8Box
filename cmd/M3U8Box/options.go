@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"flag"
 	"fmt"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sydove/M3U8Box/internal/utils"
 )
+
+var errShowUsage = errors.New("show usage")
 
 type runOptions struct {
 	links       []string
@@ -25,6 +29,7 @@ func parseRunOptions() (*runOptions, error) {
 		file        string
 	)
 
+	flag.Usage = printUsage
 	flag.StringVar(&url, "i", "", "访问的URL地址")
 	flag.StringVar(&file, "f", "", "文件路径")
 	flag.StringVar(&dir, "d", "", "保存的文件目录，默认当前目录")
@@ -33,7 +38,7 @@ func parseRunOptions() (*runOptions, error) {
 	flag.Parse()
 
 	if url == "" && file == "" {
-		return nil, fmt.Errorf("必须指定 URL 地址或文件路径")
+		return nil, errShowUsage
 	}
 
 	links, err := resolveLinks(url, file)
@@ -96,5 +101,20 @@ func resolveOutputDir(dir string) (string, error) {
 }
 
 func usageText() string {
-	return fmt.Sprintf("使用方法: %s -i=<URL> [-d=<目录>] 或 %s -f=<文件路径> [-d=<目录>]", os.Args[0], os.Args[0])
+	programName := filepath.Base(flag.CommandLine.Name())
+	return fmt.Sprintf("使用方法:\n  %s -i=<URL> [-d=<目录>] [-n=<文件名>] [-c=<并发数>]\n  %s -f=<文件路径> [-d=<目录>] [-n=<文件名>] [-c=<并发数>]", programName, programName)
+}
+
+func helpText() string {
+	var buf bytes.Buffer
+	oldOutput := flag.CommandLine.Output()
+	flag.CommandLine.SetOutput(&buf)
+	flag.PrintDefaults()
+	flag.CommandLine.SetOutput(oldOutput)
+
+	return fmt.Sprintf("%s\n\n选项:\n%s", usageText(), strings.TrimRight(buf.String(), "\n"))
+}
+
+func printUsage() {
+	fmt.Println(helpText())
 }

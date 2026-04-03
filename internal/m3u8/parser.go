@@ -23,7 +23,7 @@ func (p *HLParser) Parse(m3u8URL string, savePath string) (cryptUrl string, tsUr
 		logger.Errorf("创建请求失败: %v", err)
 		return
 	}
-	resp, err := httpclient.Client.Do(req)
+	resp, err := httpclient.DoWithRetry(req)
 	if err != nil {
 		logger.Errorf("HTTP 请求失败: %v", err)
 		logger.Errorf("请求的 URL: %s", m3u8URL)
@@ -47,13 +47,15 @@ func (p *HLParser) Parse(m3u8URL string, savePath string) (cryptUrl string, tsUr
 	tsRule := regexp.MustCompile(`https?://.*?\.ts\?auth_key=.*?\n`)
 	cryptList := cryptRule.FindStringSubmatch(strBody)
 	tsList := tsRule.FindAllString(strBody, -1)
-	if cryptList == nil || len(cryptList) < 1 {
+	if cryptList == nil || len(cryptList) < 2 {
 		logger.Errorf("未解析到视频 crypt 的链接: %s", m3u8URL)
+		err = fmt.Errorf("未解析到视频 crypt 的链接: %s", m3u8URL)
 		return
 	}
 	cryptUrl = cryptList[1]
 	if tsList == nil || len(tsList) < 1 {
 		logger.Errorf("未解析到 ts 文件: %s", m3u8URL)
+		err = fmt.Errorf("未解析到 ts 文件: %s", m3u8URL)
 		return
 	}
 
