@@ -1,4 +1,4 @@
-module M3U8Box
+module github.com/sydove/M3U8Box
 
 go 1.26
 
