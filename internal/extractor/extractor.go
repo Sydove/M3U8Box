@@ -37,8 +37,6 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 	// 发送请求
 	resp, err := httpclient.DoWithRetry(req)
 	if err != nil {
-		logger.Errorf("HTTP 请求失败: %v", err)
-		logger.Errorf("请求的 URL: %s", url)
 		return "", nil, err
 	}
 	defer resp.Body.Close()
@@ -170,7 +168,6 @@ func (ce *ChainExtraction) Extract(url string) (string, []string, error) {
 			return title, m3u8List, nil
 		}
 		lastErr = err
-		logger.Warnf("提取器尝试失败: %v", err)
 	}
 	return "", nil, fmt.Errorf("所有提取器都失败: %v", lastErr)
 }

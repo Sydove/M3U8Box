@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/sydove/M3U8Box/internal/logger"
 )
 
 var (
@@ -55,7 +53,6 @@ func DoWithRetry(req *http.Request) (*http.Response, error) {
 			break
 		}
 
-		logger.Warnf("请求失败，准备重试，第 %d/%d 次: %s, err=%v", attempt, RetryAttempts, req.URL.String(), lastErr)
 		time.Sleep(RetryDelay * time.Duration(attempt))
 	}
 

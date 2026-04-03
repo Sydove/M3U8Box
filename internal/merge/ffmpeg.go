@@ -19,6 +19,7 @@ type Merger interface {
 type FmgMerger struct{}
 
 func (f *FmgMerger) Merge(m3u8File string, videoPath string) error {
+	logger.Infof("下载完成,开始合成视频!")
 	args := []string{
 		"-allowed_extensions", "ALL",
 		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
@@ -30,9 +31,9 @@ func (f *FmgMerger) Merge(m3u8File string, videoPath string) error {
 
 	cmd := exec.Command("ffmpeg", args...)
 
-	// 将命令的标准输出和标准错误连接到终端
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// ffmpeg 输出仅写入日志文件，避免直接打印到终端
+	cmd.Stdout = logger.FileWriter()
+	cmd.Stderr = logger.FileWriter()
 
 	if err := cmd.Run(); err != nil {
 		logger.Errorf("执行 ffmpeg 命令失败: %v", err)

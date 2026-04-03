@@ -34,8 +34,6 @@ func (d *DefaultDownloader) CommonDownload(url string, savePath string) error {
 
 	resp, err := httpclient.DoWithRetry(req)
 	if err != nil {
-		logger.Errorf("HTTP 请求失败: %v", err)
-		logger.Errorf("请求的 URL: %s", url)
 		return err
 	}
 	defer resp.Body.Close()
@@ -86,6 +84,7 @@ func (d *HLDownloader) DownFile(cryptUrl string, tsList []string, staticPath str
 		logger.Errorf("下载 crypt 文件失败: %v", err)
 		return "", nil, err
 	}
+	logger.Infof("开始下载视频!")
 	// 下载ts文件
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, concurrency)

@@ -34,7 +34,7 @@ func (d *Downloader) Run(links []string) error {
 			runErr = errors.Join(runErr, fmt.Errorf("第 %d 个链接下载失败: %w", index, err))
 			continue
 		} else {
-			logger.Infof("第 %d 个链接下载完成", index)
+			logger.Infof("链接:%s下载完成\n\n", link)
 		}
 		time.Sleep(2 * time.Second)
 	}
@@ -66,6 +66,7 @@ func (d *Downloader) Task(url string) error {
 		return err
 	}
 	var targetName string
+	logger.Infof("开始处理链接:%s", url)
 	for videoIndex, m3u8URL := range m3u8List {
 		m3u8FilePath := filepath.Join(taskStaticPath, fmt.Sprintf("%s_%d.m3u8", taskHash, videoIndex))
 		cryptUrl, tsUrlList, err := d.Parser.Parse(m3u8URL, m3u8FilePath)
@@ -104,6 +105,5 @@ func (d *Downloader) cleanupStaticDir() error {
 		logger.Warnf("删除 static 目录失败: %s, err=%v", staticPath, err)
 		return fmt.Errorf("删除 static 目录失败: %s: %w", staticPath, err)
 	}
-	logger.Infof("已删除临时目录: %s", staticPath)
 	return nil
 }

@@ -25,8 +25,6 @@ func (p *HLParser) Parse(m3u8URL string, savePath string) (cryptUrl string, tsUr
 	}
 	resp, err := httpclient.DoWithRetry(req)
 	if err != nil {
-		logger.Errorf("HTTP 请求失败: %v", err)
-		logger.Errorf("请求的 URL: %s", m3u8URL)
 		return
 	}
 	defer resp.Body.Close()

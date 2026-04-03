@@ -57,6 +57,13 @@ func Close() error {
 	return logFile.Close()
 }
 
+func FileWriter() io.Writer {
+	if logFile == nil {
+		return io.Discard
+	}
+	return logFile
+}
+
 func Infof(format string, args ...any) {
 	if infoLogger == nil {
 		log.Printf("INFO "+format, args...)
