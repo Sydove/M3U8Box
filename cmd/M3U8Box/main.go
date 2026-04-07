@@ -43,7 +43,21 @@ func run() int {
 		return 1
 	}
 
-	// 运行
+	merger := &merge.FmgMerger{}
+	if options.mode == modePackage {
+		packager := app.Packager{
+			Merger:      merger,
+			AbsPath:     options.dir,
+			Name:        options.name,
+			SegmentTime: options.hlsTime,
+		}
+		if err := packager.Run(options.mp4Path); err != nil {
+			logger.Errorf("HLS 清单生成失败: %v", err)
+			return 1
+		}
+		return 0
+	}
+
 	chain := extractor.ChainExtraction{}
 	chain.AddExtractorToChain(&extractor.HLExtractor{})
 	chain.AddExtractorToChain(&extractor.BrowserhExtractor{})
@@ -51,7 +65,7 @@ func run() int {
 		ExtractorChain: chain,
 		Parser:         &m3u8.HLParser{},
 		Downloader:     &downloader.HLDownloader{},
-		Merger:         &merge.FmgMerger{},
+		Merger:         merger,
 		AbsPath:        options.dir,
 		Concurrency:    options.concurrency,
 		Name:           options.name,

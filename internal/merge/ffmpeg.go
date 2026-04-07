@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/sydove/M3U8Box/internal/logger"
@@ -14,6 +15,7 @@ import (
 type Merger interface {
 	Merge(m3u8File string, videoPath string) error
 	Modify(m3u8File, cryptPath string, staticPath string, tsPaths []string) (string, error)
+	Package(mp4Path string, playlistPath string, segmentTime int) error
 }
 
 type FmgMerger struct{}
@@ -88,4 +90,31 @@ func (f *FmgMerger) Modify(m3u8File string, cryptPath string, staticPath string,
 		return "", err
 	}
 	return modifiedM3U8Path, nil
+}
+
+func (f *FmgMerger) Package(mp4Path string, playlistPath string, segmentTime int) error {
+	logger.Infof("开始调用 ffmpeg 生成 HLS 文件")
+
+	segmentPattern := filepath.Join(filepath.Dir(playlistPath), "segment_%05d.ts")
+	args := []string{
+		"-i", mp4Path,
+		"-c", "copy",
+		"-f", "hls",
+		"-hls_time", strconv.Itoa(segmentTime),
+		"-hls_list_size", "0",
+		"-hls_playlist_type", "vod",
+		"-hls_segment_filename", segmentPattern,
+		playlistPath,
+	}
+
+	cmd := exec.Command("ffmpeg", args...)
+	cmd.Stdout = logger.FileWriter()
+	cmd.Stderr = logger.FileWriter()
+
+	if err := cmd.Run(); err != nil {
+		logger.Errorf("执行 ffmpeg HLS 打包失败: %v", err)
+		return err
+	}
+
+	return nil
 }
