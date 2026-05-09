@@ -56,6 +56,13 @@ func (d *Downloader) Task(url string) error {
 		return err
 	}
 
+	if title == "" {
+		title, err = utils.GetTaskHash(url)
+		if err != nil {
+			title = utils.GetTimestamp()
+		}
+	}
+
 	// 解析m3u8文件
 	taskHash, err := utils.GetTaskHash(title)
 	if err != nil {
@@ -85,6 +92,7 @@ func (d *Downloader) Task(url string) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("*************生成的文件名:", d.Name)
 		if d.Name != "" {
 			targetName = fmt.Sprintf("%s_%d.mp4", d.Name, videoIndex)
 		} else {

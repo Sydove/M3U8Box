@@ -46,3 +46,7 @@ func GetTaskHash(title string) (string, error) {
 	hashStr := hex.EncodeToString(hash[:])
 	return hashStr, nil
 }
+
+func GetTimestamp() string {
+	return time.Now().Format("20060102150405")
+}

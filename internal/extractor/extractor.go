@@ -54,8 +54,14 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 
 	strBody := string(body)
 	// 提取文件名称,提取所有m3u8的链接
-	titleRule := regexp.MustCompile(`property="og:title" content="(.*?)"/>`)
-	title := titleRule.FindStringSubmatch(strBody)
+	var title []string
+	baseTitleRule := regexp.MustCompile(`<title>(.*?)</title>`)
+	title = baseTitleRule.FindStringSubmatch(strBody)
+	if title == nil {
+		titleRule := regexp.MustCompile(`property="og:title" content="(.*?)"/>`)
+		title = titleRule.FindStringSubmatch(strBody)
+	}
+
 	titleText := url
 	if title == nil || len(title) <= 1 {
 		logger.Warnf("%s 标题提取失败", url)
