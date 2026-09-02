@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sydove/M3U8Box/internal/downloader"
 	"github.com/sydove/M3U8Box/internal/extractor"
 	"github.com/sydove/M3U8Box/internal/logger"
 	"github.com/sydove/M3U8Box/internal/m3u8"
@@ -18,7 +17,6 @@ import (
 type Downloader struct {
 	ExtractorChain extractor.ChainExtraction
 	Parser         m3u8.Parser
-	Downloader     downloader.Downloader
 	Merger         merge.Merger
 	AbsPath        string
 	Concurrency    int
@@ -49,8 +47,6 @@ func (d *Downloader) Run(links []string) error {
 
 func (d *Downloader) Task(url string) error {
 	// 提取m3u8文件链接
-	d.ExtractorChain.AddExtractorToChain(&extractor.HLExtractor{})
-	d.ExtractorChain.AddExtractorToChain(&extractor.BrowserhExtractor{})
 	title, m3u8List, err := d.ExtractorChain.Extract(url)
 	if err != nil {
 		return err
@@ -63,7 +59,6 @@ func (d *Downloader) Task(url string) error {
 		}
 	}
 
-	// 解析m3u8文件
 	taskHash, err := utils.GetTaskHash(title)
 	if err != nil {
 		return err
@@ -76,22 +71,11 @@ func (d *Downloader) Task(url string) error {
 	logger.Infof("开始处理链接:%s", url)
 	for videoIndex, m3u8URL := range m3u8List {
 		m3u8FilePath := filepath.Join(taskStaticPath, fmt.Sprintf("%s_%d.m3u8", taskHash, videoIndex))
-		cryptUrl, tsUrlList, err := d.Parser.Parse(m3u8URL, m3u8FilePath)
+		localM3U8Path, err := d.Parser.Parse(m3u8URL, m3u8FilePath)
 		if err != nil {
 			return err
 		}
 
-		// 下载ts文件
-		cryptPath, tsFilePathList, err := d.Downloader.DownFile(cryptUrl, tsUrlList, taskStaticPath, taskHash, d.Concurrency)
-		if err != nil {
-			return err
-		}
-
-		// 生成新的m3u8文件
-		modifiedM3U8Path, err := d.Merger.Modify(m3u8FilePath, cryptPath, taskStaticPath, tsFilePathList)
-		if err != nil {
-			return err
-		}
 		fmt.Println("*************生成的文件名:", d.Name)
 		if d.Name != "" {
 			targetName = fmt.Sprintf("%s_%d.mp4", d.Name, videoIndex)
@@ -99,7 +83,7 @@ func (d *Downloader) Task(url string) error {
 			targetName = fmt.Sprintf("%s_%d.mp4", title, videoIndex)
 		}
 		videoPath := filepath.Join(d.AbsPath, targetName)
-		if err := d.Merger.Merge(modifiedM3U8Path, videoPath); err != nil {
+		if err := d.Merger.Merge(localM3U8Path, videoPath); err != nil {
 			return err
 		}
 		time.Sleep(2 * time.Second)

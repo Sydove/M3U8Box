@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
@@ -69,17 +70,15 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 		titleText = title[1]
 	}
 
-	hrefRule := regexp.MustCompile(`:"(https:.*?.m3u8\?auth_key=.*?)",`)
+	hrefRule := regexp.MustCompile(`https?:\\?/\\?/[^"'\s<>]+?\.m3u8(?:\?[^"'\s<>]*)?`)
 	hrefs := hrefRule.FindAllStringSubmatch(strBody, -1)
 	if hrefs == nil || len(hrefs) == 0 {
 		logger.Warnf("%s 链接提取失败", url)
 	}
 	results := make([]string, 0)
 	for _, href := range hrefs {
-		if len(href) <= 1 {
-			continue
-		}
-		targetHref := strings.Replace(href[1], "\\", "", -1)
+		targetHref := strings.ReplaceAll(href[0], "\\/", "/")
+		targetHref = strings.ReplaceAll(targetHref, "\\", "")
 		results = append(results, targetHref)
 	}
 
@@ -111,44 +110,49 @@ func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 		return "", nil, err
 	}
 
-	m3u8Chan := make(chan string, 20)
 	m3u8Map := make(map[string]struct{})
+	var m3u8Mu sync.Mutex
+	var foundOnce sync.Once
+	foundM3U8 := make(chan struct{})
 
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if res, ok := ev.(*network.EventResponseReceived); ok {
 			itemUrl := res.Response.URL
 			if strings.Contains(itemUrl, ".m3u8") {
-				m3u8Chan <- itemUrl
+				m3u8Mu.Lock()
+				m3u8Map[itemUrl] = struct{}{}
+				m3u8Mu.Unlock()
+				foundOnce.Do(func() { close(foundM3U8) })
 			}
 		}
 	})
-
-	done := make(chan struct{})
-	go func() {
-		for itemUrl := range m3u8Chan {
-			if _, exists := m3u8Map[itemUrl]; !exists {
-				m3u8Map[itemUrl] = struct{}{}
-			}
-		}
-		close(done)
-	}()
 
 	var title string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(url),
 		chromedp.Title(&title),
-		chromedp.Sleep(10*time.Second),
 	); err != nil {
 		return "", nil, err
 	}
 
-	close(m3u8Chan)
-	<-done
+	m3u8Mu.Lock()
+	foundCount := len(m3u8Map)
+	m3u8Mu.Unlock()
+	if foundCount == 0 {
+		select {
+		case <-foundM3U8:
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return "", nil, ctx.Err()
+		}
+	}
 
 	var m3u8List []string
+	m3u8Mu.Lock()
 	for k := range m3u8Map {
 		m3u8List = append(m3u8List, k)
 	}
+	m3u8Mu.Unlock()
 
 	if len(m3u8List) == 0 {
 		return title, nil, fmt.Errorf("浏览器模式未捕获到 m3u8 请求: %s", url)

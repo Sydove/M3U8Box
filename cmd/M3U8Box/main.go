@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/sydove/M3U8Box/internal/app"
-	"github.com/sydove/M3U8Box/internal/downloader"
 	"github.com/sydove/M3U8Box/internal/extractor"
 	"github.com/sydove/M3U8Box/internal/logger"
 	"github.com/sydove/M3U8Box/internal/m3u8"
@@ -64,7 +63,6 @@ func run() int {
 	downloadApp := app.Downloader{
 		ExtractorChain: chain,
 		Parser:         &m3u8.HLParser{},
-		Downloader:     &downloader.HLDownloader{},
 		Merger:         merger,
 		AbsPath:        options.dir,
 		Concurrency:    options.concurrency,

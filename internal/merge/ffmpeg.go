@@ -1,15 +1,20 @@
 package merge
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/sydove/M3U8Box/internal/logger"
+	"github.com/sydove/M3U8Box/internal/utils"
 )
 
 type Merger interface {
@@ -23,27 +28,134 @@ type FmgMerger struct{}
 func (f *FmgMerger) Merge(m3u8File string, videoPath string) error {
 	logger.Infof("下载完成,开始合成视频!")
 	args := []string{
+		"-nostats",
 		"-allowed_extensions", "ALL",
-		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+		"-protocol_whitelist", "file,http,https,tcp,tls,crypto,data",
+		"-http_persistent", "1",
+		"-http_multiple", "1",
 		"-i", m3u8File,
 		"-c", "copy",
 		"-bsf:a", "aac_adtstoasc",
+		"-progress", "pipe:1",
 		videoPath,
 	}
 
 	cmd := exec.Command("ffmpeg", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("读取 ffmpeg 进度输出失败: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("读取 ffmpeg 日志输出失败: %w", err)
+	}
 
-	// ffmpeg 输出仅写入日志文件，避免直接打印到终端
-	cmd.Stdout = logger.FileWriter()
-	cmd.Stderr = logger.FileWriter()
+	durationMS := parseM3U8DurationMS(m3u8File)
+	bar := newFFmpegProgressBar(durationMS)
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		_ = bar.Exit()
+		logger.Errorf("启动 ffmpeg 命令失败: %v", err)
+		return err
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		trackFFmpegProgress(stdout, durationMS, bar)
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(logger.FileWriter(), stderr)
+	}()
+
+	err = cmd.Wait()
+	wg.Wait()
+	_ = bar.Finish()
+
+	if err != nil {
 		logger.Errorf("执行 ffmpeg 命令失败: %v", err)
 		return err
 	}
 
 	logger.Infof("视频整合完成: %s", videoPath)
 	return nil
+}
+
+func newFFmpegProgressBar(durationMS int64) interface {
+	Set64(int64) error
+	Add(int) error
+	Finish() error
+	Exit() error
+} {
+	if durationMS > 0 {
+		return utils.NewProgressBarWithDescription(int(durationMS), "合并进度")
+	}
+	return utils.NewSpinner("合并进度")
+}
+
+func trackFFmpegProgress(r io.Reader, durationMS int64, bar interface {
+	Set64(int64) error
+	Add(int) error
+}) {
+	lastSpinnerTick := time.Now()
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		_, _ = fmt.Fprintln(logger.FileWriter(), line)
+
+		if durationMS <= 0 {
+			if time.Since(lastSpinnerTick) >= 100*time.Millisecond {
+				_ = bar.Add(1)
+				lastSpinnerTick = time.Now()
+			}
+			continue
+		}
+
+		value, ok := strings.CutPrefix(line, "out_time_ms=")
+		if !ok {
+			continue
+		}
+		progressUS, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			continue
+		}
+		progressMS := progressUS / 1000
+		if progressMS > durationMS {
+			progressMS = durationMS
+		}
+		_ = bar.Set64(progressMS)
+	}
+}
+
+func parseM3U8DurationMS(m3u8File string) int64 {
+	content, err := os.ReadFile(m3u8File)
+	if err != nil {
+		logger.Warnf("读取 m3u8 时长失败: %v", err)
+		return 0
+	}
+
+	var durationMS int64
+	scanner := bufio.NewScanner(strings.NewReader(string(content)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		value, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSuffix(value, ",")
+		seconds, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			continue
+		}
+		durationMS += int64(seconds * 1000)
+	}
+
+	if durationMS == 0 {
+		logger.Warnf("m3u8 未包含 #EXTINF 时长，使用无总量进度: %s", m3u8File)
+	}
+	return durationMS
 }
 
 func (f *FmgMerger) Modify(m3u8File string, cryptPath string, staticPath string, tsPaths []string) (string, error) {
