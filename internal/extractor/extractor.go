@@ -13,6 +13,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/sydove/M3U8Box/internal/logger"
+	"github.com/sydove/M3U8Box/internal/utils"
 	"github.com/sydove/M3U8Box/pkg/httpclient"
 )
 
@@ -75,13 +76,13 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 	if hrefs == nil || len(hrefs) == 0 {
 		logger.Warnf("%s 链接提取失败", url)
 	}
-	results := make([]string, 0)
+	uniqueSet := utils.NewSet[string]()
 	for _, href := range hrefs {
 		targetHref := strings.ReplaceAll(href[0], "\\/", "/")
 		targetHref = strings.ReplaceAll(targetHref, "\\", "")
-		results = append(results, targetHref)
+		uniqueSet.Add(targetHref)
 	}
-
+	results := uniqueSet.GetSlice()
 	if len(results) == 0 {
 		return titleText, nil, fmt.Errorf("未提取到 m3u8 链接: %s", url)
 	}
@@ -147,12 +148,13 @@ func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 		}
 	}
 
-	var m3u8List []string
+	uniqueSet := utils.NewSet[string]()
 	m3u8Mu.Lock()
 	for k := range m3u8Map {
-		m3u8List = append(m3u8List, k)
+		uniqueSet.Add(k)
 	}
 	m3u8Mu.Unlock()
+	m3u8List := uniqueSet.GetSlice()
 
 	if len(m3u8List) == 0 {
 		return title, nil, fmt.Errorf("浏览器模式未捕获到 m3u8 请求: %s", url)
