@@ -58,7 +58,7 @@ func run() int {
 	}
 
 	chain := extractor.ChainExtraction{}
-	chain.AddExtractorToChain(&extractor.HLExtractor{})
+	//chain.AddExtractorToChain(&extractor.HLExtractor{})
 	chain.AddExtractorToChain(&extractor.BrowserhExtractor{})
 	downloadApp := app.Downloader{
 		ExtractorChain: chain,

@@ -35,6 +35,8 @@ func (e *HLExtractor) Extract(url string) (string, []string, error) {
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("path", "/archives/196104/")
+	req.Header.Set("Cookie", "__web_sdk_sid_v1=%7B%22sid%22%3A%221d43939290975cd07fad75c8be4484c8%22%2C%22lastBehaviorAt%22%3A1793676701034%7D")
 
 	// 发送请求
 	resp, err := httpclient.DoWithRetry(req)
@@ -94,8 +96,11 @@ type BrowserhExtractor struct{}
 
 func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
+		chromedp.Flag("headless", "new"),
+		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"),
 	)
 
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
@@ -104,10 +109,10 @@ func (e *BrowserhExtractor) Extract(url string) (string, []string, error) {
 	ctx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
 
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+	if err := chromedp.Run(ctx); err != nil {
 		return "", nil, err
 	}
 
